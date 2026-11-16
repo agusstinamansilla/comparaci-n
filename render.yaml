@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: comparador-riesgo
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    autoDeploy: true
+    # Los commits de datos (instrumentos que agregás desde el dashboard) no redeployan la app
+    buildFilter:
+      ignoredPaths:
+        - data/**
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: GITHUB_REPO
+        sync: false
+      - key: GITHUB_TOKEN
+        sync: false
+      - key: GITHUB_BRANCH
+        value: main
+      - key: APP_PASSWORD
+        sync: false
+      - key: PPI_PUBLIC_KEY
+        sync: false
+      - key: PPI_PRIVATE_KEY
+        sync: false
