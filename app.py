@@ -16,6 +16,9 @@ import streamlit as st
 
 from motor import calculo as calc
 from motor import catalogo as cat
+from motor import tecnico as tec
+from motor import valuacion as val
+from plotly.subplots import make_subplots
 from motor.actualizador import actualizar, alta_desde_fuente
 from motor.almacen import crear_almacen
 from motor.datos import hoja_sugerida, hojas_excel, leer_varios, limpiar_id
@@ -127,6 +130,8 @@ def metricas(nombre: str, indice: pd.Series, bench: pd.Series | None, rf: float)
 
 def refrescar() -> None:
     version_actual.clear()
+    datos_tecnicos.clear()
+    meta_valuacion.clear()
     calendario_on.clear()
     indice_instrumentos.clear()
     serie_total.clear()
@@ -573,6 +578,336 @@ def tabla_pagos(ids: list[str]) -> None:
             st.caption("Del calendario de pagos cargado en ⚙️ Administrar (on_data.json). Los precios ya están ajustados por estos pagos.")
 
 
+
+# --- pestaña Valuación y tendencia -------------------------------------------------------------
+
+VERDE, ROJO, AMBAR = "#1a8f4d", "#c93a3a", "#c98a1a"
+
+
+@st.cache_data(show_spinner=False)
+def datos_tecnicos(iid: str, version: str) -> pd.DataFrame | None:
+    t = val.leer_tecnico(ALM, iid, version)
+    if t is not None and not t.empty:
+        precio, volumen = t["cierre"], t["volumen"]
+    else:  # sin archivo de volumen: se usa el precio ajustado y no hay volumen
+        precio, volumen = cat.cargar_precios(ALM, POR_ID[iid], version), None
+    if precio.dropna().size < 30:
+        return None
+    eps = val.leer_eps(ALM, iid, version) if POR_ID[iid]["categoria"] == "acciones" else None
+    return tec.preparar(precio, volumen, eps)
+
+
+@st.cache_data(show_spinner=False)
+def meta_valuacion(version: str) -> dict:
+    return val.leer_meta(ALM, version)
+
+
+def _flecha(estado: str | None, desde, alcista: str, bajista: str) -> str:
+    if estado is None:
+        return "—"
+    txt = f"▲ {alcista}" if estado == "arriba" else f"▼ {bajista}"
+    return txt + (f" desde {desde:%d/%m/%y}" if desde is not None else "")
+
+
+def _rsi_txt(v) -> str:
+    if v is None:
+        return "—"
+    zona = " · sobrecompra" if v >= 70 else " · sobreventa" if v <= 30 else ""
+    return f"{v:.0f}{zona}"
+
+
+def pestania_tecnica() -> None:
+    disponibles = [i["id"] for i in INDICE if val.aplica(i) and cat.disponible(i)]
+    if not disponibles:
+        st.info("Cargá acciones desde Yahoo para ver esta pestaña.")
+        return
+    acciones = [i for i in disponibles if POR_ID[i]["categoria"] == "acciones"]
+    c1, c2 = st.columns([1, 4])
+    grupos = {k: [t for t in v if t in disponibles] for k, v in GRUPOS["acciones"].items()}
+    grupos = {k: v for k, v in grupos.items() if len(v) >= 2}
+    if "sel_tec" not in st.session_state:
+        st.session_state["sel_tec"] = (next(iter(grupos.values()), None) or acciones)[:12]
+
+    def aplicar():
+        g = st.session_state["grupo_tec"]
+        if g in grupos:
+            st.session_state["sel_tec"] = grupos[g]
+        elif g == "Todas las acciones":
+            st.session_state["sel_tec"] = acciones
+
+    c1.selectbox("Atajo", ["—", *grupos, "Todas las acciones"], key="grupo_tec", on_change=aplicar)
+    elegidos = c2.multiselect("Acciones y ETFs", disponibles, format_func=etiqueta, key="sel_tec")
+    if not elegidos:
+        st.caption("Elegí al menos una.")
+        return
+
+    meta = meta_valuacion(VERSION)
+    filas, datos = [], {}
+    for iid in elegidos:
+        df = datos_tecnicos(iid, VERSION)
+        if df is None:
+            continue
+        datos[iid] = df
+        r = tec.resumen(df)
+        filas.append(
+            {
+                "Instrumento": etiqueta(iid),
+                "Fecha": r["fecha"].date(),
+                "Precio": r["precio"],
+                "vs. media 50": None if r["dist_media_corta"] is None else r["dist_media_corta"] * 100,
+                "vs. media 200": None if r["dist_media_larga"] is None else r["dist_media_larga"] * 100,
+                "Tendencia (50 vs 200)": _flecha(r["cruce"], r["cruce_desde"], "alcista", "bajista"),
+                "RSI 14": _rsi_txt(r["rsi"]),
+                "MACD": _flecha(r["macd_estado"], r["macd_desde"], "alcista", "bajista"),
+                "Volumen vs. prom. 20": r["vol_relativo"],
+                "P/E": r["pe"],
+                "P/E mediana 5 años": r["pe_mediana"],
+                "P/E: más caro que el": None if r["pe_percentil"] is None else r["pe_percentil"] * 100,
+                "P/E forward": (meta.get(iid) or {}).get("forwardPE"),
+            }
+        )
+    if not filas:
+        st.warning("No hay datos suficientes para las elegidas.")
+        return
+    tabla = pd.DataFrame(filas)
+    texto = {"Instrumento", "Fecha", "Tendencia (50 vs 200)", "RSI 14", "MACD"}
+    for c in tabla.columns.difference(list(texto)):
+        tabla[c] = pd.to_numeric(tabla[c], errors="coerce")
+    st.dataframe(
+        tabla, hide_index=True, width="stretch",
+        column_config={
+            "Instrumento": st.column_config.TextColumn(pinned=True),
+            "Precio": st.column_config.NumberColumn(format="%.2f"),
+            "vs. media 50": st.column_config.NumberColumn(format="%+.1f%%", help="Cuánto está el precio arriba (+) o abajo (−) de su media de 50 ruedas."),
+            "vs. media 200": st.column_config.NumberColumn(format="%+.1f%%", help="Ídem contra la media de 200 ruedas (tendencia de largo plazo)."),
+            "Tendencia (50 vs 200)": st.column_config.TextColumn(help="▲ media 50 arriba de la 200 (cruce dorado); ▼ abajo (cruce de la muerte)."),
+            "RSI 14": st.column_config.TextColumn(width="medium", help="0 a 100. Arriba de 70 suele leerse como sobrecompra; abajo de 30, sobreventa."),
+            "MACD": st.column_config.TextColumn(help="▲ la línea MACD está arriba de su señal (impulso alcista); ▼ abajo."),
+            "Volumen vs. prom. 20": st.column_config.NumberColumn(format="%.1fx", help="Volumen del último día dividido por su promedio de 20 ruedas."),
+            "P/E": st.column_config.NumberColumn(format="%.1f", help="Precio / ganancia por acción de los últimos 4 trimestres."),
+            "P/E mediana 5 años": st.column_config.NumberColumn(format="%.1f"),
+            "P/E: más caro que el": st.column_config.ProgressColumn(
+                format="%.0f%% de los días", min_value=0, max_value=100,
+                help="En qué parte de su rango de 5 años está el P/E de hoy. 90% = más caro que el 90% de los días.",
+            ),
+            "P/E forward": st.column_config.NumberColumn(format="%.1f", help="P/E sobre la ganancia esperada (Yahoo)."),
+        },
+    )
+    st.download_button(
+        "⬇️ Descargar tabla (CSV)", tabla.to_csv(index=False, sep=";", decimal=",").encode("utf-8-sig"),
+        file_name="valuacion_tendencia.csv", mime="text/csv", key="dl_tec",
+    )
+    if tabla["P/E"].isna().all():
+        st.caption("El P/E aparece después de la primera actualización (botón 🔄 o la corrida diaria), que baja las ganancias trimestrales de Yahoo.")
+
+    st.divider()
+    g1, g2 = st.columns([3, 2])
+    ver = g1.radio("Gráfico de", list(datos), format_func=etiqueta, horizontal=True, key="ver_tec")
+    rango = g2.radio("Período", ["6 meses", "1 año", "3 años", "5 años"], index=1, horizontal=True, key="rango_tec")
+    df = datos[ver]
+    meses = {"6 meses": 6, "1 año": 12, "3 años": 36, "5 años": 60}[rango]
+    d = df[df.index >= df.index[-1] - pd.DateOffset(months=meses)]
+    st.plotly_chart(grafico_tecnico(d, etiqueta(ver)), width="stretch")
+    pe = df["pe"].dropna()
+    if not pe.empty:
+        st.plotly_chart(grafico_pe(pe, etiqueta(ver)), width="stretch")
+    elif POR_ID[ver]["categoria"] == "acciones":
+        st.caption("Sin P/E: todavía no se bajaron sus ganancias, o tuvo ganancias negativas.")
+
+    st.divider()
+    l1, l2 = st.columns([3, 2], gap="large")
+    with l1:
+        st.subheader(f"🧭 Qué muestra hoy {etiqueta(ver)}")
+        st.caption(f"Con los datos al {df.index[-1]:%d/%m/%Y}.")
+        for frase in lectura_de_hoy(df, tec.resumen(df), POR_ID[ver]["categoria"] == "acciones"):
+            st.markdown(f"- {frase}")
+        st.caption("Lectura automática de los indicadores, no es una recomendación de compra o venta.")
+    with l2:
+        st.subheader("📖 Cómo leer el gráfico")
+        st.markdown(GUIA_GRAFICO)
+
+    with st.expander("¿Cómo se lee cada indicador?"):
+        st.markdown(
+            "- **Medias de 50 y 200 ruedas:** el promedio del precio de los últimos 50 y 200 días hábiles. "
+            "Precio arriba de la 200 = tendencia de largo plazo alcista.\n"
+            "- **Cruce dorado / de la muerte:** la media de 50 cruza hacia arriba / hacia abajo a la de 200.\n"
+            "- **RSI (14):** mide la fuerza de las subas contra las bajas de las últimas 14 ruedas. "
+            "Más de 70 = sobrecompra, menos de 30 = sobreventa.\n"
+            "- **MACD (12, 26, 9):** diferencia entre dos medias exponenciales; cuando cruza su línea de señal "
+            "hacia arriba indica impulso alcista. El histograma es la distancia entre las dos.\n"
+            "- **Volumen relativo:** más de 1,5x el promedio suele acompañar movimientos fuertes.\n"
+            "- **P/E histórico:** precio / ganancia por acción de los últimos 12 meses (ganancia *ajustada* "
+            "que informa Yahoo). Sirve para ver si la acción está cara o barata **contra sí misma**."
+        )
+        st.caption("Indicadores calculados sobre el precio de cierre. Información educativa, no es recomendación de inversión.")
+
+
+
+def lectura_de_hoy(df: pd.DataFrame, r: dict, es_accion: bool) -> list[str]:
+    """Traduce los indicadores de hoy a frases simples. Cambia según la acción elegida."""
+    hoy = df.index[-1]
+    reciente = lambda f: f is not None and (hoy - f).days <= 30  # noqa: E731
+    out: list[str] = []
+    alcistas = bajistas = 0
+
+    d200, d50 = r["dist_media_larga"], r["dist_media_corta"]
+    if d200 is not None:
+        if d200 >= 0:
+            alcistas += 1
+            txt = f"**Largo plazo:** el precio está **{d200:+.1%} arriba de su media de 200** → la tendencia de largo plazo es **alcista**."
+        else:
+            bajistas += 1
+            txt = f"**Largo plazo:** el precio está **{d200:+.1%} debajo de su media de 200** → la tendencia de largo plazo es **bajista**."
+        if abs(d200) >= 0.2:
+            txt += " Está muy alejado de ese promedio: cuando pasa esto suelen darse correcciones o rebotes hacia la media."
+        out.append(txt)
+    if d50 is not None:
+        out.append(
+            f"**Corto plazo:** está **{d50:+.1%} {'arriba' if d50 >= 0 else 'debajo'} de su media de 50** → "
+            + ("viene subiendo en las últimas semanas." if d50 >= 0 else "viene flojo en las últimas semanas.")
+        )
+
+    if r["cruce"]:
+        f = r["cruce_desde"]
+        cuando = f" el {f:%d/%m/%y}" if f is not None else ""
+        if r["cruce"] == "arriba":
+            alcistas += 1
+            out.append(
+                f"**Cruce de medias:** la media de 50 (naranja) está **arriba** de la de 200 (azul) desde{cuando or ' hace mucho'}"
+                + (" — **cruce dorado reciente**: señal de que la tendencia de mediano plazo se dio vuelta a alcista." if reciente(f) else ": tendencia de mediano plazo alcista.")
+            )
+        else:
+            bajistas += 1
+            out.append(
+                f"**Cruce de medias:** la media de 50 (naranja) está **debajo** de la de 200 (azul) desde{cuando or ' hace mucho'}"
+                + (" — **cruce de la muerte reciente**: la tendencia de mediano plazo se dio vuelta a bajista." if reciente(f) else ": tendencia de mediano plazo bajista.")
+            )
+
+    v = r["rsi"]
+    if v is not None:
+        if v >= 70:
+            t = "**sobrecompra**: subió mucho en poco tiempo. Puede frenar o corregir, aunque en tendencias fuertes puede quedarse arriba de 70 un buen rato."
+        elif v <= 30:
+            t = "**sobreventa**: bajó mucho en poco tiempo. Suelen aparecer rebotes, pero en caídas fuertes puede seguir abajo de 30."
+        elif v >= 50:
+            t = "zona neutral con más fuerza compradora que vendedora."
+        else:
+            t = "zona neutral con más fuerza vendedora que compradora."
+        out.append(f"**RSI {v:.0f}:** {t}")
+
+    if r["macd_estado"]:
+        hist = df["histograma"].dropna()
+        crece = len(hist) > 5 and abs(hist.iloc[-1]) > abs(hist.iloc[-6])
+        f = r["macd_desde"]
+        cuando = f" desde el {f:%d/%m/%y}" if f is not None else ""
+        if r["macd_estado"] == "arriba":
+            alcistas += 1
+            t = f"la línea MACD (oscura) está **arriba** de su señal (naranja){cuando} → **impulso alcista**"
+        else:
+            bajistas += 1
+            t = f"la línea MACD (oscura) está **debajo** de su señal (naranja){cuando} → **impulso bajista**"
+        t += ", y las barras se están " + ("**agrandando** (el impulso gana fuerza)." if crece else "**achicando** (el impulso pierde fuerza; puede venir un cruce).")
+        out.append(f"**MACD:** {t}")
+
+    vr = r["vol_relativo"]
+    if vr is not None:
+        if vr >= 1.5:
+            out.append(f"**Volumen:** {vr:.1f} veces su promedio → mucho movimiento; el cambio de precio del día tiene más convicción.")
+        elif vr <= 0.7:
+            out.append(f"**Volumen:** {vr:.1f} veces su promedio → poco movimiento; el cambio de precio del día pesa menos.")
+        else:
+            out.append(f"**Volumen:** {vr:.1f} veces su promedio → normal.")
+
+    if es_accion and r["pe"] is not None:
+        pct, med = r["pe_percentil"], r["pe_mediana"]
+        nivel = "**cara** contra su propia historia" if pct >= 0.8 else "**barata** contra su propia historia" if pct <= 0.2 else "en un nivel **intermedio** de su historia"
+        out.append(
+            f"**P/E {r['pe']:.1f}** vs. mediana de 5 años {med:.1f} ({r['pe'] / med - 1:+.0%}): más caro que el {pct:.0%} de los días → {nivel}."
+        )
+
+    total = alcistas + bajistas
+    if total:
+        out.append(
+            f"**En resumen:** {alcistas} de {total} señales de tendencia (media 200, cruce de medias y MACD) son alcistas"
+            + (" — todas apuntan para arriba." if bajistas == 0 else " — todas apuntan para abajo." if alcistas == 0 else " — señales mixtas.")
+        )
+    return out
+
+
+GUIA_GRAFICO = """
+**Panel de precio**
+- **Línea oscura:** el precio.
+- **Naranja:** media de 50 ruedas (tendencia de corto/mediano plazo).
+- **Azul:** media de 200 ruedas (tendencia de largo plazo).
+- Precio **arriba** de la azul = tendencia alcista; **debajo** = bajista.
+- Naranja cruza la azul **hacia arriba** = *cruce dorado* (alcista). **Hacia abajo** = *cruce de la muerte* (bajista).
+
+**Volumen**
+- Barra **verde** = ese día subió; **roja** = bajó. La línea gris es el promedio de 20 ruedas.
+- Barras muy altas = días con mucho movimiento: confirman la suba o la baja.
+
+**RSI (violeta)**
+- Va de 0 a 100. Las líneas punteadas marcan 30 y 70.
+- **Arriba de 70:** sobrecompra (subió mucho, rápido). **Abajo de 30:** sobreventa (bajó mucho, rápido).
+
+**MACD**
+- **Línea oscura** = MACD; **naranja** = su señal.
+- Oscura cruza la naranja **hacia arriba** = impulso alcista; **hacia abajo** = impulso bajista.
+- Barras **verdes** = impulso alcista; **rojas** = bajista. Si se achican, el impulso se está agotando.
+
+**P/E histórico**
+- La línea punteada es la mediana de 5 años; la banda gris, los valores habituales.
+- **Arriba de la banda:** cara contra su historia. **Debajo:** barata.
+"""
+
+def grafico_tecnico(d: pd.DataFrame, nombre: str) -> go.Figure:
+    hay_vol = "volumen" in d and d["volumen"].notna().any()
+    filas = 4 if hay_vol else 3
+    alturas = [0.46, 0.14, 0.2, 0.2] if hay_vol else [0.55, 0.22, 0.23]
+    titulos = ["Precio y medias móviles", *(["Volumen"] if hay_vol else []), "RSI (14)", "MACD (12, 26, 9)"]
+    fig = make_subplots(rows=filas, cols=1, shared_xaxes=True, vertical_spacing=0.045, row_heights=alturas, subplot_titles=titulos)
+    fig.add_trace(go.Scatter(x=d.index, y=d["precio"], name="Precio", line=dict(color=PETROLEO, width=2)), 1, 1)
+    fig.add_trace(go.Scatter(x=d.index, y=d["media_corta"], name="Media 50", line=dict(color=COLORES[1], width=2)), 1, 1)
+    fig.add_trace(go.Scatter(x=d.index, y=d["media_larga"], name="Media 200", line=dict(color=COLORES[0], width=2)), 1, 1)
+    f = 2
+    if hay_vol:
+        sube = d["precio"].diff().fillna(0) >= 0
+        fig.add_trace(
+            go.Bar(x=d.index, y=d["volumen"], name="Volumen", marker_color=np.where(sube, "#8fc9a8", "#e6a3a3"),
+                   showlegend=False, hovertemplate="%{y:,.0f}<extra>Volumen</extra>"), f, 1,
+        )
+        fig.add_trace(go.Scatter(x=d.index, y=d["volumen_prom"], name="Prom. 20", line=dict(color=GRIS_BENCH, width=1.5), showlegend=False), f, 1)
+        f += 1
+    fig.add_trace(go.Scatter(x=d.index, y=d["rsi"], name="RSI", line=dict(color=COLORES[6], width=2), showlegend=False), f, 1)
+    for nivel in (30, 70):
+        fig.add_hline(y=nivel, line=dict(color=GRIS_BENCH, width=1, dash="dot"), row=f, col=1)
+    fig.update_yaxes(range=[0, 100], row=f, col=1)
+    f += 1
+    fig.add_trace(
+        go.Bar(x=d.index, y=d["histograma"], name="Histograma", showlegend=False,
+               marker_color=np.where(d["histograma"] >= 0, "#8fc9a8", "#e6a3a3")), f, 1,
+    )
+    fig.add_trace(go.Scatter(x=d.index, y=d["macd"], name="MACD", line=dict(color=PETROLEO, width=2), showlegend=False), f, 1)
+    fig.add_trace(go.Scatter(x=d.index, y=d["senal"], name="Señal", line=dict(color=COLORES[1], width=1.5), showlegend=False), f, 1)
+    fig = estilo(fig, nombre, 820 if hay_vol else 700)
+    fig.update_layout(hovermode="x unified", legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0.35), bargap=0)
+    fig.update_annotations(font=dict(size=13, color=TINTA_2), x=0, xanchor="left")
+    return fig
+
+
+def grafico_pe(pe: pd.Series, nombre: str) -> go.Figure:
+    ventana = pe[pe.index >= pe.index[-1] - pd.DateOffset(years=5)]
+    med = ventana.median()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=pe.index, y=pe, name="P/E", line=dict(color=PETROLEO, width=2),
+                             hovertemplate="P/E %{y:.1f}<extra></extra>"))
+    fig.add_hline(y=med, line=dict(color=COLORES[1], width=2, dash="dash"),
+                  annotation_text=f"Mediana 5 años: {med:.1f}", annotation_position="top left")
+    fig.add_hrect(y0=ventana.quantile(0.25), y1=ventana.quantile(0.75), fillcolor="#27515e", opacity=0.07, line_width=0)
+    fig = estilo(fig, f"P/E histórico — {nombre} (banda: rango del 50% central de 5 años)", 380)
+    fig.update_layout(showlegend=False)
+    return fig
+
 # --- pestaña Agregar ------------------------------------------------------------------------
 
 
@@ -797,10 +1132,12 @@ st.markdown(
     {"· datos al " + pd.Timestamp(_hasta).strftime("%d/%m/%Y") if _hasta else ""}</div></div></div>''',
     unsafe_allow_html=True,
 )
-pestanias = st.tabs([*calc.CATEGORIAS.values(), "➕ Agregar", "⚙️ Administrar"])
+pestanias = st.tabs([*calc.CATEGORIAS.values(), "📈 Valuación y tendencia", "➕ Agregar", "⚙️ Administrar"])
 for tab, categoria in zip(pestanias, calc.CATEGORIAS):
     with tab:
         pestania_categoria(categoria)
+with pestanias[len(calc.CATEGORIAS)]:
+    pestania_tecnica()
 with pestanias[-2]:
     pestania_agregar()
 with pestanias[-1]:

@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from . import fuentes
+from . import fuentes, valuacion
 from .almacen import INDICE, indice_a_texto, serie_a_csv
 from .catalogo import cargar_calendario, cargar_indice, cargar_precios, ruta_precios
 from .datos import combinar, limpiar_id
@@ -117,9 +117,12 @@ def actualizar(alm, ids: list[str] | None = None, progreso=None) -> tuple[list[d
             informe.append({"id": inst["id"], "estado": "ok", "detalle": f"hasta {serie.index[-1]:%d/%m/%Y} (+{nuevos} días)"})
         except Exception as e:  # noqa: BLE001 - se informa y se sigue con el resto
             informe.append({"id": inst["id"], "estado": "error", "detalle": str(e)[:200]})
+    if progreso:
+        progreso(1.0, "volumen y P/E de acciones")
+    valuacion.actualizar_extras(alm, version, candidatos, archivos, informe)
     if archivos:
         archivos[INDICE] = indice_a_texto(indice)
-        alm.guardar(archivos, [], f"Datos: actualización automática ({len(archivos) - 1} series)")
+        alm.guardar(archivos, [], f"Datos: actualización automática ({len(archivos) - 1} archivos)")
     return informe, bool(archivos)
 
 
@@ -143,7 +146,7 @@ def alta_desde_fuente(
     )
     por_id[iid] = inst
     nuevo = sorted(por_id.values(), key=lambda i: (i["categoria"], i["id"]))
-    alm.guardar(
-        {ruta_precios(iid): serie_a_csv(serie, "precio"), INDICE: indice_a_texto(nuevo)}, [], f"Datos: alta de {iid}"
-    )
+    archivos = {ruta_precios(iid): serie_a_csv(serie, "precio"), INDICE: indice_a_texto(nuevo)}
+    valuacion.actualizar_extras(alm, version, [inst], archivos, [])
+    alm.guardar(archivos, [], f"Datos: alta de {iid}")
     return f"{iid}: {len(serie)} datos, del {serie.index[0]:%d/%m/%Y} al {serie.index[-1]:%d/%m/%Y}."

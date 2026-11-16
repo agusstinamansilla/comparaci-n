@@ -74,6 +74,15 @@ Si una fuente falla, las demás se actualizan igual y el informe dice cuál fall
 
 Desde ⚙️ Administrar → **Agregar desde Yahoo Finance** escribís tickers (ej. `KO, PEP, AAPL.BA`), se bajan con toda su historia y quedan marcados para actualizarse solos.
 
+## Valuación y tendencia (acciones)
+
+Pestaña aparte para acciones y ETFs de Yahoo. Elegís varias (o un atajo) y se arma un cuadro con:
+distancia a las medias de 50 y 200 ruedas, tendencia (cruce 50/200), RSI 14, MACD (12, 26, 9),
+volumen contra su promedio de 20 ruedas y P/E (actual, mediana de 5 años, posición en su rango y
+forward). Debajo, el gráfico de la que elijas: precio con medias, volumen, RSI y MACD, y el P/E
+histórico. Se actualiza con la misma corrida diaria (`data/tecnico/` cierre y volumen,
+`data/eps/` ganancia por acción trimestral de Yahoo).
+
 ## Cómo cargar datos
 
 Desde ➕ Agregar se pueden subir directamente:
