@@ -6,20 +6,20 @@
     "actualizado": "2026-11-17"
   },
   "AMD": {
-    "trailingPE": 107.752144,
-    "forwardPE": 28.589813,
+    "trailingPE": 114.09049,
+    "forwardPE": 28.590137,
     "shortName": "Advanced Micro Devices, Inc.",
     "actualizado": "2026-11-17"
   },
   "AMZN": {
-    "trailingPE": 20.836702,
+    "trailingPE": 21.551003,
     "forwardPE": 23.590345,
     "shortName": "Amazon.com, Inc.",
     "actualizado": "2026-11-17"
   },
   "ASML": {
-    "trailingPE": 34.615772,
-    "forwardPE": 22.189287,
+    "trailingPE": 36.78844,
+    "forwardPE": 22.189367,
     "shortName": "ASML Holding N.V. - New York Re",
     "actualizado": "2026-11-17"
   },
@@ -30,43 +30,43 @@
     "actualizado": "2026-11-17"
   },
   "GOOGL": {
-    "trailingPE": 14.815666,
+    "trailingPE": 15.444746,
     "forwardPE": 18.689484,
     "shortName": "Alphabet Inc.",
     "actualizado": "2026-11-17"
   },
   "META": {
-    "trailingPE": 21.371885,
+    "trailingPE": 21.89479,
     "forwardPE": 17.558716,
     "shortName": "Meta Platforms, Inc.",
     "actualizado": "2026-11-17"
   },
   "MSFT": {
-    "trailingPE": 27.03497,
+    "trailingPE": 27.348995,
     "forwardPE": 21.408358,
     "shortName": "Microsoft Corporation",
     "actualizado": "2026-11-17"
   },
   "MU": {
-    "trailingPE": 9.673348,
+    "trailingPE": 10.470657,
     "forwardPE": 3.4608123,
     "shortName": "Micron Technology, Inc.",
     "actualizado": "2026-11-17"
   },
   "NU": {
-    "trailingPE": 15.85,
+    "trailingPE": 16.467533,
     "forwardPE": 11.735959,
     "shortName": "Nu Holdings Ltd.",
     "actualizado": "2026-11-17"
   },
   "NVDA": {
-    "trailingPE": 19.73957,
+    "trailingPE": 20.598946,
     "forwardPE": 9.855444,
     "shortName": "NVIDIA Corporation",
     "actualizado": "2026-11-17"
   },
   "TSLA": {
-    "trailingPE": 417.2967,
+    "trailingPE": 426.67416,
     "forwardPE": 175.86906,
     "shortName": "Tesla, Inc.",
     "actualizado": "2026-11-17"
