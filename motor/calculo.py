@@ -35,7 +35,7 @@ CATEGORIAS = {
 CATEGORIAS_AUX = {"benchmark": "Benchmark", "tipo_cambio": "Tipo de cambio (ARS por USD)"}
 TODAS_CATEGORIAS = {**CATEGORIAS, **CATEGORIAS_AUX}
 
-PERIODOS = {"1 año": 1, "3 años": 3, "5 años": 5, "Todo": None}
+PERIODOS = {"1 año": 1, "3 años": 3, "5 años": 5, "10 años": 10, "Todo": None, "Elegir fechas": "fechas"}
 
 
 def indice_objetivo(tasa_anual: float, desde: str = "2000-01-03", hasta=None) -> pd.Series:
@@ -101,7 +101,7 @@ def a_frecuencia(indice: pd.Series, frecuencia: str) -> pd.Series:
 
 
 def recortar(
-    indices: dict[str, pd.Series], anios: int | None, solo_comun: bool
+    indices: dict[str, pd.Series], anios, solo_comun: bool, fecha_desde=None, fecha_hasta=None
 ) -> tuple[dict[str, pd.Series], pd.Timestamp, pd.Timestamp, list[str]]:
     """Corta todas las series a la misma ventana. Devuelve (series, desde, hasta, avisos)."""
     avisos: list[str] = []
@@ -110,7 +110,11 @@ def recortar(
         return {}, pd.NaT, pd.NaT, avisos
     hasta = min(v.index[-1] for v in indices.values())
     desde = max(v.index[0] for v in indices.values()) if solo_comun else min(v.index[0] for v in indices.values())
-    if anios is not None:
+    if fecha_hasta is not None:
+        hasta = min(hasta, pd.Timestamp(fecha_hasta))
+    if fecha_desde is not None:
+        desde = max(desde, pd.Timestamp(fecha_desde))
+    if isinstance(anios, (int, float)):
         desde = max(desde, hasta - pd.DateOffset(years=anios))
     out = {}
     for k, v in indices.items():

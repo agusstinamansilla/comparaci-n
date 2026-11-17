@@ -100,3 +100,102 @@ def resumen(df: pd.DataFrame, anios_pe: int = 5) -> dict:
             pe_max=float(ventana.max()),
         )
     return r
+
+
+# --- Señales (lectura mecánica de cada indicador, como el "resumen técnico" de Investing) -------
+
+COMPRA, VENTA, NEUTRAL = "Compra", "Venta", "Neutral"
+
+
+def senales(r: dict) -> list[dict]:
+    """Qué 'diría' cada indicador por sí solo. Cada uno vota compra (+1), venta (−1) o neutral (0)."""
+    out = []
+
+    def agregar(indicador, valor, voto, motivo):
+        out.append({"indicador": indicador, "valor": valor, "voto": voto, "motivo": motivo})
+
+    d200, d50 = r.get("dist_media_larga"), r.get("dist_media_corta")
+    if d200 is not None:
+        agregar("Precio vs. media 200", f"{d200:+.1%}", 1 if d200 > 0 else -1,
+                "Arriba de su promedio largo: tendencia alcista." if d200 > 0 else "Debajo de su promedio largo: tendencia bajista.")
+    if d50 is not None:
+        agregar("Precio vs. media 50", f"{d50:+.1%}", 1 if d50 > 0 else -1,
+                "Viene subiendo en las últimas semanas." if d50 > 0 else "Viene bajando en las últimas semanas.")
+    if r.get("cruce"):
+        agregar("Cruce media 50 / 200", "50 arriba" if r["cruce"] == "arriba" else "50 abajo",
+                1 if r["cruce"] == "arriba" else -1,
+                "Cruce dorado vigente." if r["cruce"] == "arriba" else "Cruce de la muerte vigente.")
+    v = r.get("rsi")
+    if v is not None:
+        if v <= 30:
+            agregar("RSI 14", f"{v:.0f}", 1, "Sobreventa: cayó mucho y rápido, suelen venir rebotes.")
+        elif v >= 70:
+            agregar("RSI 14", f"{v:.0f}", -1, "Sobrecompra: subió mucho y rápido, suelen venir tomas de ganancia.")
+        else:
+            agregar("RSI 14", f"{v:.0f}", 0, "Zona neutral (entre 30 y 70).")
+    if r.get("macd_estado"):
+        agregar("MACD", "arriba de la señal" if r["macd_estado"] == "arriba" else "debajo de la señal",
+                1 if r["macd_estado"] == "arriba" else -1,
+                "Impulso alcista." if r["macd_estado"] == "arriba" else "Impulso bajista.")
+    return out
+
+
+def veredicto_tecnico(votos: list[dict]) -> str | None:
+    if not votos:
+        return None
+    s = sum(x["voto"] for x in votos)
+    n = len(votos)
+    if s >= n - 1 and s >= 3:
+        return "Compra fuerte"
+    if s >= 2:
+        return COMPRA
+    if s <= -(n - 1) and s <= -3:
+        return "Venta fuerte"
+    if s <= -2:
+        return VENTA
+    return NEUTRAL
+
+
+def veredicto_pe(r: dict) -> str | None:
+    p = r.get("pe_percentil")
+    if p is None:
+        return None
+    if p >= 0.8:
+        return "Cara"
+    if p <= 0.2:
+        return "Barata"
+    return "Precio normal"
+
+
+def conclusion(tec_v: str | None, val_v: str | None, r: dict) -> str:
+    """Combina tendencia (técnico) y precio (P/E) en una frase."""
+    if tec_v is None:
+        return "No hay datos suficientes para armar una lectura."
+    alcista = "Compra" in tec_v
+    bajista = "Venta" in tec_v
+    t = {
+        True: "la tendencia técnica es **favorable**",
+        False: "la tendencia técnica es **desfavorable**" if bajista else "la tendencia técnica es **neutral / mixta**",
+    }[alcista]
+    if val_v is None:
+        base = f"Sin P/E disponible: {t}."
+        return base[0].upper() + base[1:]
+    p = {"Cara": "está **cara** contra su propia historia", "Barata": "está **barata** contra su propia historia",
+         "Precio normal": "tiene un precio **normal** para su historia"}[val_v]
+    if alcista and val_v == "Barata":
+        cierre = "Las dos cosas acompañan: es el escenario más favorable de los cuatro."
+    elif alcista and val_v == "Cara":
+        cierre = "Sube con fuerza pero ya descuenta mucho: hay que ser selectivo con el precio de entrada."
+    elif bajista and val_v == "Barata":
+        cierre = "Está barata pero el mercado todavía no la acompaña: puede seguir bajando antes de girar."
+    elif bajista and val_v == "Cara":
+        cierre = "Ni la tendencia ni el precio acompañan: es el escenario menos favorable."
+    elif alcista:
+        cierre = "La tendencia acompaña y el precio no es una traba."
+    elif bajista:
+        cierre = "El precio no es extremo, pero la tendencia no acompaña."
+    else:
+        cierre = "No hay una señal clara para ningún lado."
+    if r.get("rsi") is not None and (r["rsi"] >= 70 or r["rsi"] <= 30):
+        cierre += " Ojo con el RSI en zona extrema: suele anticipar un movimiento en sentido contrario en el corto plazo."
+    return f"{t[0].upper() + t[1:]} y {p}. {cierre}"

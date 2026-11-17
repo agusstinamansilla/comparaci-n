@@ -171,6 +171,17 @@ def etiqueta(iid: str) -> str:
 
 st.sidebar.title("Opciones")
 periodo = st.sidebar.radio("Período", list(calc.PERIODOS), index=1, horizontal=True)
+fecha_desde = fecha_hasta = None
+if periodo == "Elegir fechas":
+    f1, f2 = st.sidebar.columns(2)
+    hoy = pd.Timestamp.today().normalize()
+    fecha_desde = f1.date_input("Desde", (hoy - pd.DateOffset(years=5)).date(), min_value=pd.Timestamp("1980-01-01").date(),
+                                max_value=hoy.date(), format="DD/MM/YYYY")
+    fecha_hasta = f2.date_input("Hasta", hoy.date(), min_value=pd.Timestamp("1980-01-01").date(),
+                                max_value=hoy.date(), format="DD/MM/YYYY")
+    if fecha_desde >= fecha_hasta:
+        st.sidebar.error("La fecha 'Desde' tiene que ser anterior a 'Hasta'.")
+        st.stop()
 frecuencia = st.sidebar.radio(
     "Frecuencia",
     ["Diaria", "Mensual"],
@@ -464,7 +475,7 @@ def pestania_categoria(categoria: str) -> None:
             )
             bench_de[iid] = b if (b in POR_ID and cat.disponible(POR_ID[b])) else None
 
-        recortados, desde, hasta, avisos_rec = calc.recortar(indices, calc.PERIODOS[periodo], solo_comun)
+        recortados, desde, hasta, avisos_rec = calc.recortar(indices, calc.PERIODOS[periodo], solo_comun, fecha_desde, fecha_hasta)
         avisos_generales += avisos_rec
         if not recortados:
             for a in avisos_generales:
@@ -616,6 +627,11 @@ def _rsi_txt(v) -> str:
     return f"{v:.0f}{zona}"
 
 
+ICONO_SENAL = {"Compra fuerte": "🟢🟢 Compra fuerte", "Compra": "🟢 Compra", "Neutral": "⚪ Neutral",
+               "Venta": "🔴 Venta", "Venta fuerte": "🔴🔴 Venta fuerte",
+               "Barata": "🟢 Barata", "Precio normal": "⚪ Normal", "Cara": "🔴 Cara", None: "—"}
+
+
 def pestania_tecnica() -> None:
     disponibles = [i["id"] for i in INDICE if val.aplica(i) and cat.disponible(i)]
     if not disponibles:
@@ -652,6 +668,8 @@ def pestania_tecnica() -> None:
         filas.append(
             {
                 "Instrumento": etiqueta(iid),
+                "Señal técnica": ICONO_SENAL[tec.veredicto_tecnico(tec.senales(r))],
+                "Valuación (P/E)": ICONO_SENAL[tec.veredicto_pe(r)] if POR_ID[iid]["categoria"] == "acciones" else "—",
                 "Fecha": r["fecha"].date(),
                 "Precio": r["precio"],
                 "vs. media 50": None if r["dist_media_corta"] is None else r["dist_media_corta"] * 100,
@@ -670,7 +688,7 @@ def pestania_tecnica() -> None:
         st.warning("No hay datos suficientes para las elegidas.")
         return
     tabla = pd.DataFrame(filas)
-    texto = {"Instrumento", "Fecha", "Tendencia (50 vs 200)", "RSI 14", "MACD"}
+    texto = {"Instrumento", "Fecha", "Tendencia (50 vs 200)", "RSI 14", "MACD", "Señal técnica", "Valuación (P/E)"}
     for c in tabla.columns.difference(list(texto)):
         tabla[c] = pd.to_numeric(tabla[c], errors="coerce")
     st.dataframe(
@@ -678,6 +696,8 @@ def pestania_tecnica() -> None:
         column_config={
             "Instrumento": st.column_config.TextColumn(pinned=True),
             "Precio": st.column_config.NumberColumn(format="%.2f"),
+            "Señal técnica": st.column_config.TextColumn(help="Votación de 5 indicadores (precio vs. medias 50 y 200, cruce, RSI y MACD). Lectura mecánica, no recomendación."),
+            "Valuación (P/E)": st.column_config.TextColumn(help="Cara si el P/E está en el 20% más alto de sus últimos 5 años; barata si está en el 20% más bajo."),
             "vs. media 50": st.column_config.NumberColumn(format="%+.1f%%", help="Cuánto está el precio arriba (+) o abajo (−) de su media de 50 ruedas."),
             "vs. media 200": st.column_config.NumberColumn(format="%+.1f%%", help="Ídem contra la media de 200 ruedas (tendencia de largo plazo)."),
             "Tendencia (50 vs 200)": st.column_config.TextColumn(help="▲ media 50 arriba de la 200 (cruce dorado); ▼ abajo (cruce de la muerte)."),
@@ -703,10 +723,10 @@ def pestania_tecnica() -> None:
     st.divider()
     g1, g2 = st.columns([3, 2])
     ver = g1.radio("Gráfico de", list(datos), format_func=etiqueta, horizontal=True, key="ver_tec")
-    rango = g2.radio("Período", ["6 meses", "1 año", "3 años", "5 años"], index=1, horizontal=True, key="rango_tec")
+    rango = g2.radio("Período", ["6 meses", "1 año", "3 años", "5 años", "10 años", "Todo"], index=1, horizontal=True, key="rango_tec")
     df = datos[ver]
-    meses = {"6 meses": 6, "1 año": 12, "3 años": 36, "5 años": 60}[rango]
-    d = df[df.index >= df.index[-1] - pd.DateOffset(months=meses)]
+    meses = {"6 meses": 6, "1 año": 12, "3 años": 36, "5 años": 60, "10 años": 120, "Todo": None}[rango]
+    d = df if meses is None else df[df.index >= df.index[-1] - pd.DateOffset(months=meses)]
     st.plotly_chart(grafico_tecnico(d, etiqueta(ver)), width="stretch")
     pe = df["pe"].dropna()
     if not pe.empty:
@@ -719,9 +739,33 @@ def pestania_tecnica() -> None:
     with l1:
         st.subheader(f"🧭 Qué muestra hoy {etiqueta(ver)}")
         st.caption(f"Con los datos al {df.index[-1]:%d/%m/%Y}.")
-        for frase in lectura_de_hoy(df, tec.resumen(df), POR_ID[ver]["categoria"] == "acciones"):
+        r_ver = tec.resumen(df)
+        votos = tec.senales(r_ver)
+        v_tec = tec.veredicto_tecnico(votos)
+        v_pe = tec.veredicto_pe(r_ver) if POR_ID[ver]["categoria"] == "acciones" else None
+        k1, k2 = st.columns(2)
+        k1.metric("Señal técnica", ICONO_SENAL[v_tec], help="Votación de los 5 indicadores de la tabla de abajo.")
+        k2.metric("Valuación por P/E", ICONO_SENAL[v_pe] if v_pe else "—", help="Contra su propia historia de 5 años.")
+        st.info("**Conclusión:** " + tec.conclusion(v_tec, v_pe, r_ver))
+        st.markdown("**Qué diría cada indicador por sí solo**")
+        st.dataframe(
+            pd.DataFrame(
+                [{"Indicador": x["indicador"], "Hoy": x["valor"],
+                  "Señal": {1: "🟢 Compra", -1: "🔴 Venta", 0: "⚪ Neutral"}[x["voto"]], "Por qué": x["motivo"]} for x in votos]
+                + ([{"Indicador": "P/E vs. su historia", "Hoy": f"{r_ver['pe']:.1f} (mediana {r_ver['pe_mediana']:.1f})",
+                     "Señal": ICONO_SENAL[v_pe], "Por qué": f"Más caro que el {r_ver['pe_percentil']:.0%} de los días de los últimos 5 años."}]
+                   if v_pe else [])
+            ),
+            hide_index=True, width="stretch",
+        )
+        st.markdown("**En detalle**")
+        for frase in lectura_de_hoy(df, r_ver, POR_ID[ver]["categoria"] == "acciones"):
             st.markdown(f"- {frase}")
-        st.caption("Lectura automática de los indicadores, no es una recomendación de compra o venta.")
+        st.caption(
+            "Cómo se arma la señal: cada indicador vota compra, venta o neutral; con 4 o 5 votos a favor es *fuerte*, "
+            "con 2 o 3 de diferencia es compra/venta, y si se compensan es neutral (igual que el resumen técnico de Investing). "
+            "Es una lectura mecánica del pasado: no mira noticias, balances ni tu perfil de riesgo, y no es una recomendación."
+        )
     with l2:
         st.subheader("📖 Cómo leer el gráfico")
         st.markdown(GUIA_GRAFICO)
