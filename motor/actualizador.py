@@ -11,7 +11,7 @@ import pandas as pd
 
 from . import fuentes, valuacion
 from .almacen import INDICE, indice_a_texto, serie_a_csv
-from .catalogo import cargar_calendario, cargar_indice, cargar_precios, ruta_precios
+from .catalogo import CALENDARIO_ON, calendario_a_texto, cargar_calendario, cargar_indice, cargar_precios, ruta_precios
 from .datos import combinar, limpiar_id
 
 # Estas fuentes devuelven la historia completa: se reemplaza la serie entera (en Yahoo los precios
@@ -127,13 +127,22 @@ def actualizar(alm, ids: list[str] | None = None, progreso=None) -> tuple[list[d
 
 
 def alta_desde_fuente(
-    alm, iid: str, nombre: str, categoria: str, moneda: str, benchmark: str | None, precio: str, fuente: dict
+    alm, iid: str, nombre: str, categoria: str, moneda: str, benchmark: str | None, precio: str, fuente: dict,
+    pagos_nuevos: dict | None = None,
 ) -> str:
     """Crea (o pisa) un instrumento bajando su historia de la fuente indicada."""
     version = alm.version()
     indice = cargar_indice(alm, version)
     iid = limpiar_id(iid)
-    serie = fuentes.bajar(fuente).dropna()
+    archivos: dict[str, str] = {}
+    if fuente["tipo"] == "ppi":
+        calendario = cargar_calendario(alm, version)
+        if pagos_nuevos:  # se suma la ON al calendario de pagos
+            calendario[iid[:4]] = pagos_nuevos
+            archivos[CALENDARIO_ON] = calendario_a_texto(calendario)
+        serie = _ppi_ajustado({"id": iid, "fuente": fuente}, pd.Series(dtype=float), calendario)
+    else:
+        serie = fuentes.bajar(fuente).dropna()
     serie = serie[serie > 0]
     if len(serie) < 2:
         raise fuentes.FuenteNoDisponible(f"{iid}: la fuente devolvió menos de 2 datos")
@@ -146,7 +155,7 @@ def alta_desde_fuente(
     )
     por_id[iid] = inst
     nuevo = sorted(por_id.values(), key=lambda i: (i["categoria"], i["id"]))
-    archivos = {ruta_precios(iid): serie_a_csv(serie, "precio"), INDICE: indice_a_texto(nuevo)}
+    archivos.update({ruta_precios(iid): serie_a_csv(serie, "precio"), INDICE: indice_a_texto(nuevo)})
     valuacion.actualizar_extras(alm, version, [inst], archivos, [])
     alm.guardar(archivos, [], f"Datos: alta de {iid}")
     return f"{iid}: {len(serie)} datos, del {serie.index[0]:%d/%m/%Y} al {serie.index[-1]:%d/%m/%Y}."

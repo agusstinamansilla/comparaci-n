@@ -20,7 +20,7 @@ from motor import tecnico as tec
 from motor import valuacion as val
 from plotly.subplots import make_subplots
 from motor.actualizador import actualizar, alta_desde_fuente
-from motor.almacen import crear_almacen
+from motor.almacen import crear_almacen, indice_a_texto
 from motor.datos import hoja_sugerida, hojas_excel, leer_varios, limpiar_id
 
 st.set_page_config(page_title="Comparador de riesgo y rendimiento", page_icon="📈", layout="wide")
@@ -1088,6 +1088,121 @@ def pestania_administrar() -> None:
                 except Exception as e:  # noqa: BLE001
                     st.error(f"{t}: {e}")
             refrescar()
+
+    st.divider()
+    st.subheader("Agregar ON o bono (se actualiza desde PPI)")
+    with st.expander("📋 Cómo cargarla", expanded=False):
+        st.markdown(
+            """
+1. **Ticker:** el de PPI en dólares MEP, con la **D** al final (ej. `YM34D`, `GD35D`). Para bonos del Tesoro elegí categoría *Bonos*.
+2. **Fechas de pago:** son necesarias para que el cobro del cupón **no se vea como una caída**.
+   - Si la ON ya está en el calendario (lo buscamos por las 4 primeras letras del ticker), no hace falta cargarlas.
+   - Si no está, pegá el **vencimiento** y **todas las fechas de cupón/amortización** (pasadas y futuras) separadas por coma, en formato `AAAA-MM-DD`. Las sacás del prospecto o de tu `on_data.json`.
+3. Tocá **Bajar y guardar**: se baja **toda la historia** desde PPI, se ajusta por los pagos y desde ahí se actualiza sola todos los días.
+
+No hace falta subir ningún archivo. Si da error de login, revisá que `PPI_PUBLIC_KEY` y `PPI_PRIVATE_KEY` estén cargadas en Render.
+"""
+        )
+    cal = calendario_on(VERSION)
+    with st.form("ppi"):
+        p1, p2, p3, p4 = st.columns([2, 2, 1, 2])
+        ticker = p1.text_input("Ticker PPI", placeholder="YM34D").strip().upper()
+        categoria = p2.selectbox("Categoría", ["on", "bonos"], format_func=calc.CATEGORIAS.get)
+        moneda = p3.selectbox("Moneda", ["USD", "ARS"], key="mon_ppi")
+        benchs = candidatos_benchmark()
+        bench = p4.selectbox("Benchmark", ["", *benchs], index=(benchs.index("GD30D") + 1) if "GD30D" in benchs else 0)
+        nombre = st.text_input("Nombre (opcional)", placeholder="YPF 2034")
+        q1, q2 = st.columns([1, 3])
+        venc = q1.text_input("Vencimiento", placeholder="2034-01-17")
+        cupones = q2.text_input("Fechas de pago (si no está en el calendario)", placeholder="2026-01-17, 2026-07-17, 2027-01-17, …")
+        if st.form_submit_button("⬇️ Bajar y guardar") and ticker:
+            pagos_nuevos = None
+            if venc.strip() or cupones.strip():
+                try:
+                    fechas = sorted({f"{pd.Timestamp(x.strip()):%Y-%m-%d}" for x in cupones.split(",") if x.strip()})
+                    pagos_nuevos = {"vencimiento": f"{pd.Timestamp(venc.strip()):%Y-%m-%d}" if venc.strip() else None, "cupones": fechas}
+                except Exception:  # noqa: BLE001
+                    st.error("Revisá las fechas: tienen que ir como AAAA-MM-DD separadas por coma.")
+                    st.stop()
+            elif ticker[:4] not in cal:
+                st.warning(f"{ticker[:4]} no está en el calendario de pagos: se carga igual, pero los cupones se van a ver como caídas hasta que cargues sus fechas.")
+            try:
+                with st.spinner(f"Bajando {ticker} de PPI…"):
+                    msg = alta_desde_fuente(
+                        ALM, ticker, nombre.strip() or ticker, categoria, moneda, bench or None, "ajustado",
+                        {"tipo": "ppi", "ticker": ticker, "tipo_ppi": "ON" if categoria == "on" else "BONOS",
+                         "settlement": "A-24HS", "desde": "2015-01-01"},
+                        pagos_nuevos,
+                    )
+                st.success(msg)
+                refrescar()
+            except Exception as e:  # noqa: BLE001
+                st.error(f"{ticker}: {e}")
+
+    st.divider()
+    st.subheader("Agregar fondo (se actualiza desde CAFCI)")
+    with st.expander("📋 Cómo cargarlo", expanded=False):
+        st.markdown(
+            """
+CAFCI solo publica el **último día**, así que la historia se sube **una sola vez** y después se actualiza sola.
+
+1. **Nombre en CAFCI:** copialo **exacto** como aparece en la planilla diaria de CAFCI, con la clase (ej. `Galileo Income - Clase A`). Mayúsculas y tildes no importan.
+2. **Archivo con la historia**, en cualquiera de estos formatos:
+   - El `historico.csv` de tu dashboard de fondos (columnas `fondo, fecha, vcp`): se toma solo la fila de este fondo.
+   - Un Excel o CSV con **Fecha** en la primera columna y el **valor de cuotaparte** en la segunda.
+3. El valor tiene que ser **por cuotaparte** (como en `historico.csv`), **no por 1000 cuotapartes** como en la planilla de CAFCI. Si la escala no coincide, la actualización diaria lo detecta y avisa sin guardar.
+4. Si el fondo **cambió de nombre** (ej. Gainvest → Stonex), poné el nombre viejo arriba y el nuevo en *Otros nombres*.
+
+Las fechas pueden ir como `dd/mm/aaaa` o `aaaa-mm-dd`, y los números con coma o punto decimal.
+"""
+        )
+    with st.form("fci"):
+        f1, f2, f3 = st.columns([3, 1, 2])
+        nombre_cafci = f1.text_input("Nombre en CAFCI", placeholder="Galileo Income - Clase A").strip()
+        moneda = f2.selectbox("Moneda", ["ARS", "USD"], key="mon_fci_alta")
+        bench = f3.selectbox("Benchmark", ["", *candidatos_benchmark()], key="bench_fci_alta")
+        g1, g2 = st.columns(2)
+        alias = g1.text_input("Otros nombres en CAFCI (opcional, separados por ;)")
+        iid = g2.text_input("ID (opcional)", placeholder="se arma solo a partir del nombre")
+        archivo = st.file_uploader("Histórico de cuotapartes", type=["csv", "xlsx", "xls"], key="hist_fci")
+        if st.form_submit_button("💾 Guardar fondo") and nombre_cafci:
+            if archivo is None:
+                st.error("Falta el archivo con la historia de cuotapartes.")
+                st.stop()
+            try:
+                precios, _, avisos = leer_varios([(archivo.name, archivo.getvalue())])
+            except Exception as e:  # noqa: BLE001
+                st.error(f"No pude leer el archivo: {e}")
+                st.stop()
+            norm = lambda t: " ".join(str(t).lower().split())  # noqa: E731
+            buscados = {norm(nombre_cafci), *(norm(a) for a in alias.split(";") if a.strip())}
+            col = next((c for c in precios.columns if norm(c) in buscados), None)
+            if col is None and precios.shape[1] == 1:
+                col = precios.columns[0]
+            if col is None:
+                st.error(
+                    f"El archivo tiene {precios.shape[1]} fondos y ninguno se llama '{nombre_cafci}'. "
+                    "Revisá que el nombre coincida con el del archivo."
+                )
+                st.stop()
+            nuevo_id = limpiar_id(iid or nombre_cafci.replace(" - Clase ", "_").replace(" ", "_"))
+            fila = {"columna": col, "id": nuevo_id, "nombre": nombre_cafci, "categoria": "fci", "moneda": moneda,
+                    "benchmark": bench or None, "precio": "cuotaparte"}
+            archivos, indice, resumen = cat.preparar_alta(
+                ALM, VERSION, INDICE, [fila], precios, pd.DataFrame(columns=["fecha", "instrumento", "monto"])
+            )
+            for inst in indice:
+                if inst["id"] == nuevo_id:
+                    inst["fuente"] = {"tipo": "fci", "nombre": nombre_cafci,
+                                      **({"alias": [a.strip() for a in alias.split(";") if a.strip()]} if alias.strip() else {})}
+            archivos[cat.INDICE] = indice_a_texto(indice)
+            try:
+                ALM.guardar(archivos, [], f"Datos: alta del fondo {nuevo_id}")
+            except Exception as e:  # noqa: BLE001
+                st.error(f"No se pudo guardar: {e}")
+                st.stop()
+            refrescar()
+            st.success(" ".join(resumen) + " Desde mañana se actualiza solo desde CAFCI.")
 
     st.divider()
     c1, c2 = st.columns(2)
