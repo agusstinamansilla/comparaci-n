@@ -1,74 +1,74 @@
 {
   "AAPL": {
-    "trailingPE": 39.3245,
-    "forwardPE": 33.404278,
+    "trailingPE": 39.204674,
+    "forwardPE": 33.335762,
     "shortName": "Apple Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "AMD": {
-    "trailingPE": 110.61967,
-    "forwardPE": 29.350985,
+    "trailingPE": 107.53348,
+    "forwardPE": 30.05627,
     "shortName": "Advanced Micro Devices, Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "AMZN": {
-    "trailingPE": 21.594172,
-    "forwardPE": 24.447918,
+    "trailingPE": 20.852024,
+    "forwardPE": 24.504671,
     "shortName": "Amazon.com, Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "ASML": {
-    "trailingPE": 34.02436,
-    "forwardPE": 21.810183,
+    "trailingPE": 34.030975,
+    "forwardPE": 22.00766,
     "shortName": "ASML Holding N.V. - New York Re",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "GLD": {
     "trailingPE": null,
     "forwardPE": null,
     "shortName": "SPDR Gold Shares",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "GOOGL": {
-    "trailingPE": 14.797389,
-    "forwardPE": 18.68993,
+    "trailingPE": 14.634197,
+    "forwardPE": 18.463291,
     "shortName": "Alphabet Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "META": {
-    "trailingPE": 20.981747,
-    "forwardPE": 17.238184,
+    "trailingPE": 21.116135,
+    "forwardPE": 17.277569,
     "shortName": "Meta Platforms, Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "MSFT": {
-    "trailingPE": 26.536013,
-    "forwardPE": 21.012196,
+    "trailingPE": 26.4184,
+    "forwardPE": 21.00641,
     "shortName": "Microsoft Corporation",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "MU": {
-    "trailingPE": 9.373469,
-    "forwardPE": 3.353525,
+    "trailingPE": 9.585077,
+    "forwardPE": 3.3946302,
     "shortName": "Micron Technology, Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "NU": {
-    "trailingPE": 15.165376,
-    "forwardPE": 11.39183,
+    "trailingPE": 15.48718,
+    "forwardPE": 11.342722,
     "shortName": "Nu Holdings Ltd.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "NVDA": {
-    "trailingPE": 19.151709,
-    "forwardPE": 9.123002,
+    "trailingPE": 19.656252,
+    "forwardPE": 9.0910845,
     "shortName": "NVIDIA Corporation",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   },
   "TSLA": {
-    "trailingPE": 421.2747,
-    "forwardPE": 177.5456,
+    "trailingPE": 417.08694,
+    "forwardPE": 177.71233,
     "shortName": "Tesla, Inc.",
-    "actualizado": "2026-11-18"
+    "actualizado": "2026-11-19"
   }
 }
