@@ -1,25 +1,25 @@
 {
   "AAPL": {
-    "trailingPE": 39.23708,
-    "forwardPE": 33.029312,
+    "trailingPE": 38.502785,
+    "forwardPE": 32.70253,
     "shortName": "Apple Inc.",
     "actualizado": "2026-11-20"
   },
   "AMD": {
-    "trailingPE": 104.52778,
-    "forwardPE": 27.73461,
+    "trailingPE": 93.25427,
+    "forwardPE": 24.743383,
     "shortName": "Advanced Micro Devices, Inc.",
     "actualizado": "2026-11-20"
   },
   "AMZN": {
-    "trailingPE": 20.805983,
-    "forwardPE": 23.555567,
+    "trailingPE": 20.235756,
+    "forwardPE": 22.909983,
     "shortName": "Amazon.com, Inc.",
     "actualizado": "2026-11-20"
   },
   "ASML": {
-    "trailingPE": 33.371063,
-    "forwardPE": 21.391407,
+    "trailingPE": 31.649977,
+    "forwardPE": 20.288162,
     "shortName": "ASML Holding N.V. - New York Re",
     "actualizado": "2026-11-20"
   },
@@ -30,44 +30,44 @@
     "actualizado": "2026-11-20"
   },
   "GOOGL": {
-    "trailingPE": 14.238121,
-    "forwardPE": 17.823967,
+    "trailingPE": 14.262141,
+    "forwardPE": 17.854036,
     "shortName": "Alphabet Inc.",
     "actualizado": "2026-11-20"
   },
   "META": {
-    "trailingPE": 20.341862,
-    "forwardPE": 16.71247,
+    "trailingPE": 19.456694,
+    "forwardPE": 15.985231,
     "shortName": "Meta Platforms, Inc.",
     "actualizado": "2026-11-20"
   },
   "MSFT": {
-    "trailingPE": 26.007307,
-    "forwardPE": 20.590195,
+    "trailingPE": 25.59238,
+    "forwardPE": 20.261694,
     "shortName": "Microsoft Corporation",
     "actualizado": "2026-11-20"
   },
   "MU": {
-    "trailingPE": 9.288847,
-    "forwardPE": 3.3232498,
+    "trailingPE": 8.250174,
+    "forwardPE": 2.951646,
     "shortName": "Micron Technology, Inc.",
     "actualizado": "2026-11-20"
   },
   "NU": {
-    "trailingPE": 14.775,
-    "forwardPE": 11.098591,
+    "trailingPE": 14.362374,
+    "forwardPE": 10.788637,
     "shortName": "Nu Holdings Ltd.",
     "actualizado": "2026-11-20"
   },
   "NVDA": {
-    "trailingPE": 15.679913,
-    "forwardPE": 8.79118,
+    "trailingPE": 14.591299,
+    "forwardPE": 8.180832,
     "shortName": "NVIDIA Corporation",
     "actualizado": "2026-11-20"
   },
   "TSLA": {
-    "trailingPE": 411.43954,
-    "forwardPE": 173.40059,
+    "trailingPE": 386.57724,
+    "forwardPE": 162.92241,
     "shortName": "Tesla, Inc.",
     "actualizado": "2026-11-20"
   }
