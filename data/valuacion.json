@@ -6,7 +6,7 @@
     "actualizado": "2026-11-21"
   },
   "AMD": {
-    "trailingPE": 98.23843,
+    "trailingPE": 90.68163,
     "forwardPE": 24.060778,
     "shortName": "Advanced Micro Devices, Inc.",
     "actualizado": "2026-11-21"
@@ -43,24 +43,24 @@
   },
   "MSFT": {
     "trailingPE": 25.2881,
-    "forwardPE": 20.018377,
+    "forwardPE": 20.020792,
     "shortName": "Microsoft Corporation",
     "actualizado": "2026-11-21"
   },
   "MU": {
-    "trailingPE": 9.289219,
+    "trailingPE": 7.998251,
     "forwardPE": 2.846877,
     "shortName": "Micron Technology, Inc.",
     "actualizado": "2026-11-21"
   },
   "NU": {
-    "trailingPE": 14.828948,
+    "trailingPE": 14.087501,
     "forwardPE": 10.619953,
     "shortName": "Nu Holdings Ltd.",
     "actualizado": "2026-11-21"
   },
   "NVDA": {
-    "trailingPE": 15.671659,
+    "trailingPE": 13.483351,
     "forwardPE": 7.5596437,
     "shortName": "NVIDIA Corporation",
     "actualizado": "2026-11-21"
